@@ -32,56 +32,41 @@ async def list_biddings(state: str, client: AsyncClient) -> str:
     response = await client.post(url, headers=headers, data=payload)
     return response
 
-'''
-<span>
-        <h5>Leilão SFI - Edital Único 0029/0223 - CPA/RE - AC</h5>
-</span>
-<p><span><strong>Tipos de imóveis: </strong>Casas - 114, Apartamentos - 173, Outros - 9</span><br /><span><strong>Dados
-                        do leilão: </strong>Data: 18/01/2024 às 10:00hs. Endereço: www.hammer.lel.br</span></p>
-<p class="action"> <a class="submit-d submit-white submit-small" href="#"
-                onclick="javascript:ListarEdital('00290223','CPA/RE','14')"
-                title="Listar todos os imóveis deste edital">Listar todos os imóveis deste edital</a> <a
-                class="submit-d submit-white submit-small" href="#"
-                onclick="javascript:ExibeDoc('/editais/EL00290223CPARE.PDF')">Baixar edital e anexos</a><br /><span
-                style="font-size:0.7em;">(Data do arquivo: 15/12/2023 09:51:36)</span></p><br>
-<hr /><br><span>
-        <h5>Leilão SFI - Edital Único 0032/0223 - CPA/RE - AC</h5>
-</span>
-<p><span><strong>Tipos de imóveis: </strong>Casas - 170, Apartamentos - 124, Outros - 2</span><br /><span><strong>Dados
-                        do leilão: </strong>Data: 24/01/2024 às 10:00hs. Endereço: www.mgl.com.br</span></p>
-<p class="action"> <a class="submit-d submit-white submit-small" href="#"
-                onclick="javascript:ListarEdital('00320223','CPA/RE','14')"
-                title="Listar todos os imóveis deste edital">Listar todos os imóveis deste edital</a> <a
-                class="submit-d submit-white submit-small" href="#"
-                onclick="javascript:ExibeDoc('/editais/EL00320223CPARE.PDF')">Baixar edital e anexos</a><br /><span
-                style="font-size:0.7em;">(Data do arquivo: 18/12/2023 11:06:23)</span></p><br>
-<hr /><br>
-'''
 def parse_auction_data(html_content: str) -> List[AuctionItem]:
     soup = BeautifulSoup(html_content, 'html.parser')
     auction_items = []
 
     for item in soup.find_all('h5'):
         heading = item.get_text(strip=True)
+        if 'Venda Online' in heading:
+            auction_items.extend(parse_online_sell_data(item))
+        elif 'Leilão SFI' in heading:
+            auction_items.extend(parse_sfi_auction(item))
+        elif 'Licitação Aberta' in heading:
+            auction_items.extend(parse_open_bidding(item))
 
-        try:
-            first_sibling = item.parent.find_next_siblings('p')[0].get_text(strip=True)
-            summary = first_sibling.split("Tipos de imóveis:")[1].split("Dados do leilão:")[0].strip()
-            date = first_sibling.split('Dados do leilão:')[1].split('Endereço:')[0].split('Data:')[1].strip()
-            address = first_sibling.split('Dados do leilão:')[1].split('Endereço:')[1].strip()
-        except IndexError:
-            summary = date = address = None
+    return auction_items
 
-        try:
-            second_sibling = item.parent.find_next_siblings('p')[1]
-            hdnNumLicit = second_sibling.contents[1].attrs['onclick'].split("'")[1]
-            hdnSgComissao = second_sibling.contents[1].attrs['onclick'].split("'")[3]
-            hdnNumTipoVenda = second_sibling.contents[1].attrs['onclick'].split("'")[5]
-            edital = second_sibling.contents[3].attrs['onclick'].split("'")[1]
-        except (IndexError, AttributeError):
-            hdnNumLicit = hdnSgComissao = hdnNumTipoVenda = edital = None
+def parse_online_sell_data(item) -> List[AuctionItem]:
+    auction_items = []
+    heading = item.get_text(strip=True)
+    data = item.parent.find_next_siblings('p')[0].contents
+    try:
+        summary = data[0].contents[1]
+        date = data[2].contents[1]
+        address = None
+    except IndexError:
+        summary = date = None
 
-        auction_items.append(AuctionItem(
+    try:
+        hdnNumLicit = data[4].contents[1].attrs['onclick'].split("'")[1]
+        hdnSgComissao = data[4].contents[1].attrs['onclick'].split("'")[3]
+        hdnNumTipoVenda = data[4].contents[1].attrs['onclick'].split("'")[5]
+        edital = None
+    except (IndexError, AttributeError):
+        hdnNumLicit = hdnSgComissao = hdnNumTipoVenda = None
+
+    auction_items.append(AuctionItem(
             heading=heading,
             summary=summary,
             date=date,
@@ -91,5 +76,71 @@ def parse_auction_data(html_content: str) -> List[AuctionItem]:
             hdnNumTipoVenda=hdnNumTipoVenda,
             edital=edital
         ))
+    
+    return auction_items
 
+def parse_open_bidding(item) -> List[AuctionItem]:
+    auction_items = []
+    heading = item.get_text(strip=True)
+    try:
+        first_sibling = item.parent.find_next_siblings('p')[0].get_text(strip=True)
+        summary = first_sibling.split("Tipos de imóveis:")[1].split("Dados do leilão:")[0].strip()
+        date = first_sibling.split('Dados do leilão:')[1].split('Endereço:')[0].split('Data:')[1].strip()
+        address = first_sibling.split('Dados do leilão:')[1].split('Endereço:')[1].strip()
+    except IndexError:
+        summary = date = address = None
+
+    try:
+        second_sibling = item.parent.find_next_siblings('p')[1]
+        hdnNumLicit = second_sibling.contents[1].attrs['onclick'].split("'")[1]
+        hdnSgComissao = second_sibling.contents[1].attrs['onclick'].split("'")[3]
+        hdnNumTipoVenda = second_sibling.contents[1].attrs['onclick'].split("'")[5]
+        edital = second_sibling.contents[3].attrs['onclick'].split("'")[1]
+    except (IndexError, AttributeError):
+        hdnNumLicit = hdnSgComissao = hdnNumTipoVenda = edital = None
+
+    auction_items.append(AuctionItem(
+            heading=heading,
+            summary=summary,
+            date=date,
+            address=address,
+            hdnNumLicit=hdnNumLicit,
+            hdnSgComissao=hdnSgComissao,
+            hdnNumTipoVenda=hdnNumTipoVenda,
+            edital=edital
+        ))
+    
+    return auction_items
+
+def parse_sfi_auction(item) -> List[AuctionItem]:
+    auction_items = []
+    heading = item.get_text(strip=True)
+    try:
+        first_sibling = item.parent.find_next_siblings('p')[0].get_text(strip=True)
+        summary = first_sibling.split("Tipos de imóveis:")[1].split("Dados do leilão:")[0].strip()
+        date = first_sibling.split('Dados do leilão:')[1].split('Endereço:')[0].split('Data:')[1].strip()
+        address = first_sibling.split('Dados do leilão:')[1].split('Endereço:')[1].strip()
+    except IndexError:
+        summary = date = address = None
+
+    try:
+        second_sibling = item.parent.find_next_siblings('p')[1]
+        hdnNumLicit = second_sibling.contents[1].attrs['onclick'].split("'")[1]
+        hdnSgComissao = second_sibling.contents[1].attrs['onclick'].split("'")[3]
+        hdnNumTipoVenda = second_sibling.contents[1].attrs['onclick'].split("'")[5]
+        edital = second_sibling.contents[3].attrs['onclick'].split("'")[1]
+    except (IndexError, AttributeError):
+        hdnNumLicit = hdnSgComissao = hdnNumTipoVenda = edital = None
+
+    auction_items.append(AuctionItem(
+            heading=heading,
+            summary=summary,
+            date=date,
+            address=address,
+            hdnNumLicit=hdnNumLicit,
+            hdnSgComissao=hdnSgComissao,
+            hdnNumTipoVenda=hdnNumTipoVenda,
+            edital=edital
+        ))
+    
     return auction_items
