@@ -1,6 +1,4 @@
 from enum import Enum
-from pydantic import BaseModel
-from typing import Optional
 
 class BrazilianState(Enum):
     AC = "AC"
@@ -30,12 +28,3 @@ class BrazilianState(Enum):
     SP = "SP"
     SE = "SE"
     TO = "TO"
-class AuctionItem(BaseModel):
-    heading: str
-    summary: Optional[str]
-    date: Optional[str]
-    address: Optional[str]
-    hdnNumLicit: Optional[str]
-    hdnSgComissao: Optional[str]
-    hdnNumTipoVenda: Optional[str]
-    edital: Optional[str]
