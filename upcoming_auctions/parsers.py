@@ -1,7 +1,8 @@
 from typing import List
+import re 
 from bs4 import BeautifulSoup
 
-from upcoming_auctions.interfaces import AuctionEvent
+from upcoming_auctions.interfaces import AuctionEvent, ScrapperResult, SfiAuctionItemDetails
 
 def parse_online_sell(item) -> List[AuctionEvent]:
     auction_items = []
@@ -108,3 +109,31 @@ def parse_auction_items(event: BeautifulSoup) -> List[str]:
             ids = input_tag['value'].split('||')
             all_ids.extend(ids)
     return all_ids
+
+def parse_sfi_auction_item_details(acc: ScrapperResult, event: BeautifulSoup):
+    heading = event.find('h5').get_text(strip=True)
+    content = event.find('div', {'class': 'content'})
+    type_ = content.find('span').find_next('strong').get_text(strip=True)
+    avaliation_value = content.find('p').get_text(strip=True).split('R$')[1].split('V')[0]
+    min_sale_value_1st_auction = content.find('p').get_text(strip=True).split('R$')[2].split('V')[0]
+    min_sale_value_2nd_auction = content.find('p').get_text(strip=True).split('R$')[3].split('V')[0]
+    city = content.find(string="Comarca: ").parent.find('strong').get_text(strip=True).split('-')[0]
+    estate = content.find(string="Comarca: ").parent.find('strong').get_text(strip=True).split('-')[1]
+    description = event.find(string="Descrição:").parent.parent.get_text(strip=True).split('Descrição:')[1].split('.')[0]
+    
+    return SfiAuctionItemDetails(
+        name=heading,
+        type=type_,
+        avaliation_value=parse_string_to_float(avaliation_value),
+        first_auction_value=parse_string_to_float(min_sale_value_1st_auction),
+        second_auction_value=parse_string_to_float(min_sale_value_2nd_auction),
+        city=city,
+        state=estate,
+        description=description
+    )
+
+def parse_string_to_float(string: str) -> float:
+    return float(re.sub(r'[^\d,]', '', string).replace(',', '.'))
+    
+
+    
