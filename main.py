@@ -11,12 +11,12 @@ app = FastAPI()
 @app.get("/caixa/upcoming/{state}")
 async def get_upcoming(state: BrazilianState):
 
-    client = AsyncClient(timeout=15.0, transport=AsyncHTTPTransport(retries=3))
+    client = AsyncClient(timeout=240, transport=AsyncHTTPTransport(retries=3))
     data = ScrapperResult()
     await set_starting_cookies(client)
     events = await sort_auction_events(str(state.value), client)
     
-    semaphore = Semaphore(5)
+    semaphore = Semaphore(20)
     tasks = []
 
     for event in events:
